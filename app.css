@@ -197,3 +197,7 @@ canvas.chart { width: 100%; height: 220px; display: block; }
 .setup { margin: 64px 4px 0; padding: 22px; background: var(--card, #111); border-radius: 22px; }
 .setup h2 { margin: 0 0 10px; font-size: 22px; }
 .setup p { margin: 8px 0; line-height: 1.4; }
+
+.setup label { display: block; margin-top: 16px; font-size: 13px; color: var(--secondary, rgba(235,235,245,0.6)); }
+.setup-link { width: 100%; min-height: 88px; box-sizing: border-box; border-radius: 12px; background: var(--card2, #2c2c2e); color: var(--text, #fff); border: 0; padding: 12px 14px; font-size: 16px; line-height: 1.35; margin: 8px 0 12px; resize: vertical; }
+.setup .btn { width: 100%; min-height: 44px; border-radius: 12px; background: var(--card2, #2c2c2e); color: var(--blue, #0a84ff); font-size: 17px; font-weight: 600; }

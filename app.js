@@ -11,15 +11,40 @@
   };
   const BOT_ORDER = ["scanner", "analyst", "brain", "executor", "risk"];
 
-  // ---------- params (hash) -> localStorage; DATA_PATH is removed from the URL bar ----------
+  // ---------- params (hash) -> localStorage ----------
+  // iOS gives a standalone home-screen app its own storage, separate from Safari.
+  // Never strip #b/#d/#t in the browser: Add to Home Screen uses the current URL,
+  // so the hash must still be visible when Gio taps Share. Only strip it after
+  // saving, and only when already running standalone.
+  function isStandalone() {
+    return window.navigator.standalone === true
+      || (window.matchMedia && (window.matchMedia("(display-mode: standalone)").matches
+        || window.matchMedia("(display-mode: fullscreen)").matches));
+  }
+  function parseDeskLink(raw) {
+    const s = String(raw || "").trim();
+    if (!s) return null;
+    const i = s.indexOf("#");
+    const hash = (i >= 0 ? s.slice(i + 1) : s).replace(/^#/, "");
+    if (!hash || hash.indexOf("=") < 0) return null;
+    const p = new URLSearchParams(hash);
+    const d = p.get("d"), b = p.get("b"), t = p.get("t");
+    if (!d && !b && !t) return null;
+    return { d: d || "", b: (b || "").replace(/\/+$/, ""), t: t || "" };
+  }
+  function saveDeskLink(got) {
+    if (!got) return false;
+    if (got.d) localStorage.setItem("desk_data_path", got.d);
+    if (got.b) localStorage.setItem("desk_data_base", got.b);
+    if (got.t) localStorage.setItem("desk_read_token", got.t);
+    return !!(localStorage.getItem("desk_data_path"));
+  }
   const hp = new URLSearchParams(location.hash.replace(/^#/, ""));
-  if (hp.get("d")) localStorage.setItem("desk_data_path", hp.get("d"));
-  if (hp.get("b")) localStorage.setItem("desk_data_base", hp.get("b").replace(/\/+$/, ""));
-  if (hp.get("t")) localStorage.setItem("desk_read_token", hp.get("t"));
+  saveDeskLink(parseDeskLink(location.hash));
   const DEMO = hp.get("demo"); // "1" | "empty" | "error" | null
   const START_SCREEN = hp.get("screen") || "home";
   const START_MINT = hp.get("mint") || null;
-  if (hp.get("d") || hp.get("b") || hp.get("t")) {
+  if (isStandalone() && (hp.get("d") || hp.get("b") || hp.get("t"))) {
     hp.delete("d"); hp.delete("b"); hp.delete("t");
     history.replaceState(null, "", location.pathname + location.search + (hp.toString() ? "#" + hp : ""));
   }
@@ -318,7 +343,12 @@
     const v = $("#view");
     if (!DEMO && !DATA_PATH) {
       $("#offline").hidden = true;
-      v.innerHTML = `<div class="setup"><h2>Not linked to your desk yet</h2><p class="muted">Open the private link your desk sends you on Telegram once. It is kept on this phone only and never put in this site.</p><p class="faint">No numbers are shown until a desk link is set.</p></div>`;
+      v.innerHTML = `<div class="setup"><h2>Not linked to your desk yet</h2>
+        <p class="muted">Open the private link from Telegram in Safari, confirm your numbers are showing, then tap Share and Add to Home Screen. Leave the link in the address bar when you add it.</p>
+        <label for="desk-link">Link desk</label>
+        <textarea id="desk-link" class="setup-link" rows="3" placeholder="Paste the setup link from Telegram" autocomplete="off" autocapitalize="off" spellcheck="false"></textarea>
+        <button type="button" class="btn" id="desk-link-go">Link desk</button>
+        <p class="faint" id="desk-link-msg">The link stays on this phone only and is never sent back to this site. No numbers are shown until a desk link is set.</p></div>`;
       return;
     }
     const fn = { home, bots, activity, account, audit, coin }[S.screen] || home;
@@ -394,6 +424,18 @@
 
   // ---------- events ----------
   document.addEventListener("click", (e) => {
+    const go = e.target.closest("#desk-link-go");
+    if (go) {
+      const raw = ($("#desk-link") && $("#desk-link").value) || "";
+      const msg = $("#desk-link-msg");
+      if (!saveDeskLink(parseDeskLink(raw))) {
+        if (msg) msg.textContent = "That didn't look like a desk setup link. Paste the whole link from Telegram.";
+        return;
+      }
+      if (msg) msg.textContent = "Linked. Opening your desk…";
+      location.reload();
+      return;
+    }
     const t = e.target.closest("[data-tab],[data-go],[data-open],[data-back],[data-range],#screen,#sellnow,#invite");
     if (!t) return;
     if (t.dataset.tab) return go(t.dataset.tab);

@@ -1,5 +1,5 @@
 /* Service worker: caches only the static app shell. Never caches /d/ data or screen.jpg. */
-const SHELL = "desk-shell-v10";
+const SHELL = "desk-shell-v11";
 const FILES = ["./", "index.html", "app.css", "app.js", "chart.js", "manifest.json", "icons/apple-touch-icon.png"];
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(SHELL).then((c) => c.addAll(FILES))); self.skipWaiting(); });
 self.addEventListener("activate", (e) => {
@@ -10,7 +10,7 @@ self.addEventListener("fetch", (e) => {
   const u = new URL(e.request.url);
   if (u.pathname.includes("/d/") || u.pathname.endsWith(".jpg") || u.pathname.includes("/api/")) return; // network only
   if (e.request.method !== "GET" || u.origin !== self.location.origin) return;
-  e.respondWith(caches.match(e.request).then((r) => r || fetch(e.request)));
+  e.respondWith(fetch(e.request).then((r) => { const c = r.clone(); caches.open(SHELL).then((cache) => cache.put(e.request, c)); return r; }).catch(() => caches.match(e.request)));
 });
 self.addEventListener("push", (e) => {
   let d = {}; try { d = e.data ? e.data.json() : {}; } catch (_) {}
