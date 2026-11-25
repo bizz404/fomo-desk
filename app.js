@@ -1,4 +1,4 @@
-/* FOMO Desk iPhone app (STEP 10). Plan B hosting: polls d/{DATA_PATH}/*.json + screen.jpg every 15s, no SSE.
+/* FOMO Desk iPhone app (STEP 10). Plan B hosting: polls Upstash Redis REST (GET one snap / 15s) or d/{DATA_PATH}/*.json + screen.jpg, no SSE.
  * Every FOMO link shown here comes from the desk's JSON (built by links.py). This file never builds a FOMO URL.
  * Demo data exists ONLY behind #demo=1 / #demo=empty / #demo=error and is always labelled "DEMO DATA · not real numbers". */
 (function () {
@@ -14,38 +14,72 @@
   // ---------- params (hash) -> localStorage; DATA_PATH is removed from the URL bar ----------
   const hp = new URLSearchParams(location.hash.replace(/^#/, ""));
   if (hp.get("d")) localStorage.setItem("desk_data_path", hp.get("d"));
-  if (hp.get("b")) localStorage.setItem("desk_data_base", hp.get("b").replace(/\/?$/, "/"));
+  if (hp.get("b")) localStorage.setItem("desk_data_base", hp.get("b").replace(/\/+$/, ""));
+  if (hp.get("t")) localStorage.setItem("desk_read_token", hp.get("t"));
   const DEMO = hp.get("demo"); // "1" | "empty" | "error" | null
   const START_SCREEN = hp.get("screen") || "home";
   const START_MINT = hp.get("mint") || null;
-  if (hp.get("d") || hp.get("b")) {
-    hp.delete("d"); hp.delete("b");
+  if (hp.get("d") || hp.get("b") || hp.get("t")) {
+    hp.delete("d"); hp.delete("b"); hp.delete("t");
     history.replaceState(null, "", location.pathname + location.search + (hp.toString() ? "#" + hp : ""));
   }
   const DATA_PATH = localStorage.getItem("desk_data_path") || "";
-  const BASE = localStorage.getItem("desk_data_base") || "";
+  const BASE = (localStorage.getItem("desk_data_base") || "").replace(/\/+$/, "");
+  const READ_TOKEN = localStorage.getItem("desk_read_token") || "";
 
   const S = { state: null, chart: null, activity: null, account: null, bots: {}, coin: {}, audit: {},
     lastOk: null, err: null, retryAt: 0, range: "LIVE", frameTs: null, screen: START_SCREEN, mint: START_MINT, query: "" };
 
   // ---------- data source ----------
-  function url(file) { return `${BASE}d/${encodeURIComponent(DATA_PATH)}/${file}`; }
+  const UPSTASH = !!(READ_TOKEN && BASE);
+  function url(file) { return `${BASE}/d/${encodeURIComponent(DATA_PATH)}/${file}`; }
+  function upstashGet(key) { return `${BASE}/get/${encodeURIComponent(key)}`; }
+  async function fetchJSON(u, headers) {
+    const r = await fetch(u, { cache: "no-store", credentials: "omit", referrerPolicy: "no-referrer", headers: headers || {} });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return r.json();
+  }
   async function getJSON(file) {
     if (DEMO) return Demo.get(file);
     if (!DATA_PATH) throw new Error("no data path");
-    const r = await fetch(url(file), { cache: "no-store", credentials: "omit", referrerPolicy: "no-referrer" });
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    return r.json();
+    return fetchJSON(url(file));
+  }
+  async function getSnap() {
+    const body = await fetchJSON(upstashGet("desk:" + DATA_PATH + ":snap"), { Authorization: "Bearer " + READ_TOKEN });
+    if (body.result == null) throw new Error("empty snap");
+    return typeof body.result === "string" ? JSON.parse(body.result) : body.result;
+  }
+  function applySnap(snap) {
+    S.state = snap.state; S.chart = snap.chart; S.activity = snap.activity; S.account = snap.account;
+    S.orders = snap.orders || S.orders;
+    if (snap.bots) S.bots = snap.bots;
+    if (snap.coins) Object.assign(S.coin, snap.coins);
+    if (snap.audits) Object.assign(S.audit, snap.audits);
+    S.snapFrameTs = snap.frame_ts || (snap.state && snap.state.frame_ts) || null;
   }
 
   async function poll() {
     try {
-      const [st, ch, act, acc] = await Promise.all([getJSON("state.json"), getJSON("chart.json"), getJSON("activity.json"), getJSON("account.json")]);
-      S.state = st; S.chart = ch; S.activity = act; S.account = acc;
-      if (S.screen === "bots") await Promise.all(BOT_ORDER.map(async (b) => { try { S.bots[b] = await getJSON(`bots/${b}.json`); } catch (_) {} }));
-      if (S.mint && (S.screen === "coin" || S.screen === "audit")) {
-        try { S.coin[S.mint] = await getJSON(`coin/${S.mint}.json`); } catch (_) { S.coin[S.mint] = S.coin[S.mint] || null; }
-        try { S.audit[S.mint] = await getJSON(`audit/${S.mint}.json`); } catch (_) { S.audit[S.mint] = S.audit[S.mint] || null; }
+      if (DEMO) {
+        const [st, ch, act, acc] = await Promise.all([getJSON("state.json"), getJSON("chart.json"), getJSON("activity.json"), getJSON("account.json")]);
+        S.state = st; S.chart = ch; S.activity = act; S.account = acc;
+        if (S.screen === "bots") await Promise.all(BOT_ORDER.map(async (b) => { try { S.bots[b] = await getJSON(`bots/${b}.json`); } catch (_) {} }));
+        if (S.mint && (S.screen === "coin" || S.screen === "audit")) {
+          try { S.coin[S.mint] = await getJSON(`coin/${S.mint}.json`); } catch (_) { S.coin[S.mint] = S.coin[S.mint] || null; }
+          try { S.audit[S.mint] = await getJSON(`audit/${S.mint}.json`); } catch (_) { S.audit[S.mint] = S.audit[S.mint] || null; }
+        }
+      } else if (UPSTASH) {
+        if (!DATA_PATH) throw new Error("no data path");
+        applySnap(await getSnap());
+      } else {
+        if (!DATA_PATH) throw new Error("no data path");
+        const [st, ch, act, acc] = await Promise.all([getJSON("state.json"), getJSON("chart.json"), getJSON("activity.json"), getJSON("account.json")]);
+        S.state = st; S.chart = ch; S.activity = act; S.account = acc;
+        if (S.screen === "bots") await Promise.all(BOT_ORDER.map(async (b) => { try { S.bots[b] = await getJSON(`bots/${b}.json`); } catch (_) {} }));
+        if (S.mint && (S.screen === "coin" || S.screen === "audit")) {
+          try { S.coin[S.mint] = await getJSON(`coin/${S.mint}.json`); } catch (_) { S.coin[S.mint] = S.coin[S.mint] || null; }
+          try { S.audit[S.mint] = await getJSON(`audit/${S.mint}.json`); } catch (_) { S.audit[S.mint] = S.audit[S.mint] || null; }
+        }
       }
       S.lastOk = Date.now(); S.err = null;
       if (DEMO === "error") throw new Error("demo: desk offline");
@@ -53,6 +87,7 @@
       S.err = String(e.message || e); S.retryAt = Date.now() + POLL_MS;
     }
     render();
+    if (!DEMO && UPSTASH) loadFrame();
   }
 
   // ---------- helpers ----------
@@ -310,15 +345,40 @@
 
   // Live screen: double buffered, never flashes
   let front = 0;
-  function frameUrl() { return DEMO ? Demo.frame() : DATA_PATH ? url("screen.jpg") + "?t=" + Date.now() : null; }
+  function frameUrl() { return DEMO ? Demo.frame() : (!UPSTASH && DATA_PATH && BASE) ? url("screen.jpg") + "?t=" + Date.now() : null; }
   function frameLabel() {
     const fresh = S.frameTs && Date.now() - S.frameTs < 5000;
     return fresh ? '<i class="dot red"></i>Live · Bot\'s computer' : `<i class="dot grey"></i>Last frame ${S.frameTs ? new Date(S.frameTs).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}`;
   }
+  function adoptFrame(src, tsMs) {
+    if (!src) return;
+    S.frameSrc = src; S.frameTs = tsMs;
+    const n = $("#fnone"); if (n) n.remove();
+    const l = $("#flabel"); if (l) l.innerHTML = frameLabel();
+    showFrame();
+  }
   function loadFrame() {
+    if (DEMO) {
+      const u = frameUrl(); if (!u) return;
+      const img = new Image();
+      img.onload = () => adoptFrame(u, Date.now() - (DEMO === "error" ? 120000 : 1000));
+      img.onerror = () => {};
+      img.src = u;
+      return;
+    }
+    if (UPSTASH) {
+      const ts = S.snapFrameTs;
+      if (!ts || ts === S.lastFrameTs) return;
+      fetchJSON(upstashGet("desk:" + DATA_PATH + ":frame"), { Authorization: "Bearer " + READ_TOKEN }).then((body) => {
+        if (!body || body.result == null || body.result === "") return;
+        S.lastFrameTs = ts;
+        adoptFrame("data:image/jpeg;base64," + body.result, ts * 1000);
+      }).catch(() => {});
+      return;
+    }
     const u = frameUrl(); if (!u) return;
     const img = new Image();
-    img.onload = () => { S.frameTs = DEMO ? Date.now() - (DEMO === "error" ? 120000 : 1000) : Date.now(); S.frameSrc = u; const n = $("#fnone"); if (n) n.remove(); const l = $("#flabel"); if (l) l.innerHTML = frameLabel(); showFrame(); };
+    img.onload = () => adoptFrame(u, Date.now());
     img.onerror = () => {};
     img.src = u;
   }
