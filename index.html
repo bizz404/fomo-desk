@@ -4,18 +4,28 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="theme-color" content="#0b0b0f">
+  <meta name="apple-mobile-web-app-title" content="Desk">
+  <meta name="theme-color" content="#000000">
+  <meta name="referrer" content="no-referrer">
   <title>Desk</title>
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="stylesheet" href="app.css">
 </head>
 <body>
-  <main>
-    <h1>Desk</h1>
-    <p>Frontend skeleton (STEP 4). Screens land in later steps.</p>
-  </main>
+  <div id="demo-banner" class="demo-banner" hidden>DEMO DATA · not real numbers</div>
+  <div id="offline" class="offline" hidden></div>
+  <main id="view" aria-live="polite"></main>
+  <nav class="tabbar" id="tabbar">
+    <button data-tab="home" class="tab"><span class="ti">⌂</span><span>Home</span></button>
+    <button data-tab="bots" class="tab"><span class="ti">◎</span><span>Bots</span></button>
+    <button data-tab="activity" class="tab"><span class="ti">≡</span><span>Activity</span></button>
+    <button data-tab="account" class="tab"><span class="ti">◉</span><span>Account</span></button>
+  </nav>
+  <div id="sheet-root"></div>
+  <script src="chart.js" defer></script>
   <script src="app.js" defer></script>
 </body>
 </html>
