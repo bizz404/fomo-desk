@@ -320,8 +320,21 @@
   }
   function setRow(s) {
     const isNum = s.kind === "number" || s.kind === "int";
-    return `<div class="set"><div class="top"><span>${esc(s.key.replace(/^[a-z]+\./, ""))}</span><span class="val">${esc(typeof s.value === "boolean" ? (s.value ? "on" : "off") : s.value === "" ? "—" : s.value)}</span></div>
-      ${isNum && s.min != null && s.max != null ? `<input type="range" min="${s.min}" max="${s.max}" step="any" value="${s.value}" disabled aria-label="${esc(s.key)}">` : ""}</div>`;
+    const label = s.key.replace(/^[a-z]+\./, "");
+    const range = s.range || (isNum && s.min != null && s.max != null ? "[" + s.min + ", " + s.max + "]" : "");
+    const step = s.kind === "int" ? "1" : "any";
+    const shown = typeof s.value === "boolean" ? (s.value ? "on" : "off") : (s.value === "" || s.value == null ? "" : String(s.value));
+    let control = "";
+    if (isNum && s.min != null && s.max != null) {
+      control = `<div class="slide"><input type="range" min="${s.min}" max="${s.max}" step="${step}" value="${s.value}" disabled aria-label="${esc(s.key)} slider"><input type="number" class="exact" min="${s.min}" max="${s.max}" step="${step}" value="${s.value}" disabled aria-label="${esc(s.key)}" inputmode="${s.kind === "int" ? "numeric" : "decimal"}"></div>`;
+    } else if (s.kind === "time") {
+      control = `<div class="slide"><input type="time" class="exact wide" value="${esc(shown)}" disabled aria-label="${esc(s.key)}"></div>`;
+    } else if (s.kind === "bool" || s.kind === "enum") {
+      control = `<div class="slide"><input type="text" class="exact wide" value="${esc(shown || "—")}" disabled aria-label="${esc(s.key)}"></div>`;
+    } else {
+      control = `<div class="slide"><input type="text" class="exact wide" value="${esc(shown)}" placeholder="—" disabled aria-label="${esc(s.key)}"></div>`;
+    }
+    return `<div class="set"><div class="top"><span>${esc(label)}</span>${isNum ? "" : `<span class="val">${esc(shown || "—")}</span>`}</div>${control}${range ? `<div class="range">${esc(range)}</div>` : ""}</div>`;
   }
 
   // ---------- search ----------
@@ -507,7 +520,7 @@
       { ts: now - 2600, kind: "buy", label: "Bought DEMOB" }, { ts: now - 1500, kind: "stop", label: "-25% · -$1.08" },
       { ts: now - 900, kind: "sell", label: "+$2.10" }, { ts: now - 200, kind: "buy", label: "Bought DEMOA" }] };
     const groups = { scanner: [["scanner.min_liquidity_usd", 20000, 0, 10000000], ["scanner.max_top10_pct", 25, 0, 100]], analyst: [["analyst.min_score", 70, 0, 100]], brain: [["brain.risk_per_trade_pct", 3, 0.01, 100], ["brain.max_ticket_usd", 50, 0.01, 1000000]], executor: [["executor.dip_pct", 15, 0, 100], ["executor.tp_x", 2, 1, 100]], risk: [["risk.stop_pct", 25, 0.01, 100], ["risk.night_loss_stop_pct", 30, 0.01, 100]] };
-    const settings = {}; Object.keys(groups).forEach((g) => (settings[g] = groups[g].map(([key, value, min, max]) => ({ key, value, min, max, kind: "number" }))));
+    const settings = {}; Object.keys(groups).forEach((g) => (settings[g] = groups[g].map(([key, value, min, max]) => ({ key, value, min, max, kind: "number", range: "[" + min + ", " + max + "]" }))));
     const account = { mode: "PAPER", paper_start_cash: 36, free_cash: state.free_cash, fomo_handle: "demo", profile_url: null, invite_url: null, notifier: "telegram", push_connected: false, settings };
     const decisions = (bot) => ({ bot, decisions: empty ? [] : bot === "scanner"
       ? [{ ts: now - 120, mint: M[0], symbol: "DEMOA", verdict: "pass", reason: "cleared", link: null }, { ts: now - 300, mint: M[2], symbol: "DEMOC", verdict: "kill", reason: "top10 31%", link: null }]

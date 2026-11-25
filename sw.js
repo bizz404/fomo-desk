@@ -1,5 +1,5 @@
 /* Service worker: caches only the static app shell. Never caches /d/ data or screen.jpg. */
-const SHELL = "desk-shell-v11";
+const SHELL = "desk-shell-v12";
 const FILES = ["./", "index.html", "app.css", "app.js", "chart.js", "manifest.json", "icons/apple-touch-icon.png"];
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(SHELL).then((c) => c.addAll(FILES))); self.skipWaiting(); });
 self.addEventListener("activate", (e) => {
