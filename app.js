@@ -361,7 +361,7 @@
     if (E === undefined) return head + loading("list");
     if (!E) return head + '<div class="list"><div class="empty">Established mode data not available</div></div>';
     const until = E.until ? new Date(E.until * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : null;
-    const modeLine = E.active ? `Established mode on${until ? " · stops buying at " + esc(until) : ""}` : `Established mode off · desk is on ${esc(E.mode || "launches")}`;
+    const modeLine = E.active ? `Established mode on (${esc(E.profile || "strict")} rules)${until ? " · stops buying at " + esc(until) : ""}` : `Established mode off · desk is on ${esc(E.mode || "launches")}`;
     const td = E.today || {};
     const open = E.open || [], closed = E.closed || [], watch = E.watchlist || [];
     const openRows = open.map((p) => `<div class="row"><div class="mid"><div class="t">${esc(p.symbol)} ${chainBadge(p.chain)}</div>
