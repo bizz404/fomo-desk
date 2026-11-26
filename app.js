@@ -80,6 +80,7 @@
     if (snap.bots) S.bots = snap.bots;
     if (snap.coins) Object.assign(S.coin, snap.coins);
     if (snap.audits) Object.assign(S.audit, snap.audits);
+    if (snap.established !== undefined) S.est = snap.established;
     S.snapFrameTs = snap.frame_ts || (snap.state && snap.state.frame_ts) || null;
   }
 
@@ -350,6 +351,40 @@
   }
 
   // ---------- render ----------
+  // Established-coin PAPER mode (Coins tab). Links come from the snap (links.py), never built here.
+  const CHAIN = { solana: ["SOL", "#9945ff"], base: ["BASE", "#0052ff"], bnb: ["BNB", "#f0b90b"], robinhood: ["HOOD", "#00c805"] };
+  const chainBadge = (c) => { const b = CHAIN[c] || [String(c || "?").toUpperCase(), "#8e8e93"]; return `<span class="chain" style="border-color:${b[1]};color:${b[1]}">${esc(b[0])}</span>`; };
+  const signed = (v) => (v == null || isNaN(v) ? "—" : (v >= 0 ? "+" : "") + usd(v));
+  function est() {
+    const E = S.est;
+    const head = `<div class="title">Coins <span class="paper">PAPER</span></div>`;
+    if (E === undefined) return head + loading("list");
+    if (!E) return head + '<div class="list"><div class="empty">Established mode data not available</div></div>';
+    const until = E.until ? new Date(E.until * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : null;
+    const modeLine = E.active ? `Established mode on${until ? " · stops buying at " + esc(until) : ""}` : `Established mode off · desk is on ${esc(E.mode || "launches")}`;
+    const td = E.today || {};
+    const open = E.open || [], closed = E.closed || [], watch = E.watchlist || [];
+    const openRows = open.map((p) => `<div class="row"><div class="mid"><div class="t">${esc(p.symbol)} ${chainBadge(p.chain)}</div>
+        <div class="s">${usd(p.size_usd)} · in ${fmtPrice(p.entry_price)} → now ${fmtPrice(p.current_price)}</div>
+        <div class="s">stop ${fmtPrice(p.stop_price)}${p.target_price ? " · target " + fmtPrice(p.target_price) : " · half sold, trailing"}</div></div>
+        <div class="v"><div class="${p.pnl_usd >= 0 ? "up" : "down"}">${signed(p.pnl_usd)} · ${pct(p.pnl_pct)}</div>${fomoBtn(p.link)}</div></div>`).join("");
+    const closedRows = closed.slice(0, 15).map((p) => `<div class="row"><div class="mid"><div class="t">${esc(p.symbol)} ${chainBadge(p.chain)}</div>
+        <div class="s">${esc(p.exit_reason || "")} · ${hhmm(p.closed_at)}</div></div>
+        <div class="v"><div class="${p.pnl_usd >= 0 ? "up" : "down"}">${signed(p.pnl_usd)} · ${pct(p.pnl_pct)}</div>${fomoBtn(p.link)}</div></div>`).join("");
+    const watchRows = watch.map((w) => `<div class="row"><div class="mid"><div class="t">${esc(w.symbol)} ${chainBadge(w.chain)}${w.watch_only ? ' <span class="faint">watch only</span>' : ""}</div>
+        <div class="s">${w.score != null ? "score " + esc(w.score) + " · " : ""}mcap ${short(w.mc)} · liq ${short(w.liq)}</div></div>
+        <div class="v"><div>${w.price != null ? fmtPrice(w.price) : "—"}</div><div class="${(w.h24 || 0) >= 0 ? "up" : "down"}">${pct(w.h24)} 24h</div>${fomoBtn(w.link)}</div></div>`).join("");
+    return head + `<div class="note">${modeLine}</div>
+      <div class="bal"><div class="bal-row"><span class="big ${td.total_usd >= 0 ? "up" : "down"}">${signed(td.total_usd)}</span></div>
+        <div class="sub-row"><span>today · realized ${signed(td.realized_usd)} · open ${signed(td.open_pnl_usd)} · ${esc(td.trades || 0)} closed</span></div></div>
+      <div class="section-h"><h2>Open · ${open.length}</h2></div>
+      <div class="list">${openRows || '<div class="empty">No open positions</div>'}</div>
+      <div class="section-h"><h2>Closed</h2></div>
+      <div class="list">${closedRows || '<div class="empty">No closed trades yet</div>'}</div>
+      <div class="section-h"><h2>Watchlist · ${watch.filter((w) => !w.watch_only).length}</h2></div>
+      <div class="list">${watchRows || '<div class="empty">Watchlist empty</div>'}</div>
+      <div class="note">${esc(E.fill_note || "")}${E.last_refresh ? " Universe refreshed " + hhmm(E.last_refresh) + "." : ""}</div>`;
+  }
   function render() {
     $("#demo-banner").hidden = !DEMO;
     offlineRow();
@@ -364,7 +399,7 @@
         <p class="faint" id="desk-link-msg">The link stays on this phone only and is never sent back to this site. No numbers are shown until a desk link is set.</p></div>`;
       return;
     }
-    const fn = { home, bots, activity, account, audit, coin }[S.screen] || home;
+    const fn = { home, bots, activity, account, audit, coin, est }[S.screen] || home;
     v.innerHTML = fn();
     document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("on", t.dataset.tab === S.screen));
     if (S.screen === "home" && S.state) {
