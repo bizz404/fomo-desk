@@ -74,6 +74,11 @@
     if (body.result == null) throw new Error("empty snap");
     return typeof body.result === "string" ? JSON.parse(body.result) : body.result;
   }
+  async function getShorts() {
+    const body = await fetchJSON(upstashGet("desk:" + DATA_PATH + ":shorts"), { Authorization: "Bearer " + READ_TOKEN });
+    if (body.result == null) return null;
+    return typeof body.result === "string" ? JSON.parse(body.result) : body.result;
+  }
   function applySnap(snap) {
     S.state = snap.state; S.chart = snap.chart; S.activity = snap.activity; S.account = snap.account;
     S.orders = snap.orders || S.orders;
@@ -97,6 +102,7 @@
       } else if (UPSTASH) {
         if (!DATA_PATH) throw new Error("no data path");
         applySnap(await getSnap());
+        try { S.shorts = await getShorts(); } catch (_) { /* optional section: never breaks the app */ }
       } else {
         if (!DATA_PATH) throw new Error("no data path");
         const [st, ch, act, acc] = await Promise.all([getJSON("state.json"), getJSON("chart.json"), getJSON("activity.json"), getJSON("account.json")]);
@@ -355,6 +361,24 @@
   const CHAIN = { solana: ["SOL", "#9945ff"], base: ["BASE", "#0052ff"], bnb: ["BNB", "#f0b90b"], robinhood: ["HOOD", "#00c805"] };
   const chainBadge = (c) => { const b = CHAIN[c] || [String(c || "?").toUpperCase(), "#8e8e93"]; return `<span class="chain" style="border-color:${b[1]};color:${b[1]}">${esc(b[0])}</span>`; };
   const signed = (v) => (v == null || isNaN(v) ? "—" : (v >= 0 ? "+" : "") + usd(v));
+  function shortsSection() {
+    const H = S.shorts;
+    if (!H) return "";
+    const rows = (H.summary || []).filter((r) => r.stop_pct === 1 || r.stop_pct === 3);
+    const open = (H.open || []).map((p) => `<div class="row"><div class="mid"><div class="t">SHORT ${esc(p.coin)}</div>
+        <div class="s">setup ${esc(p.setup)} · in ${fmtPrice(p.entry_px)} → now ${p.mark != null ? fmtPrice(p.mark) : "—"} · 1% stop ${fmtPrice(p.stop_1pct)}</div></div>
+        <div class="v"><div class="${(p.pnl_usd || 0) >= 0 ? "up" : "down"}">${signed(p.pnl_usd)} · ${pct(p.pnl_pct)}</div></div></div>`).join("");
+    const sum = rows.map((r) => `<div class="row"><div class="mid"><div class="t">${esc(r.stop_pct)}% stop · ${esc(r.lev)}x${r.lev === 25 ? " (hypothetical)" : ""}</div>
+        <div class="s">${esc(r.closed)} closed · ${r.win_rate != null ? Math.round(r.win_rate) + "% win" : "no wins yet"} · ${esc(r.liquidations)} liquidated${r.open ? " · " + esc(r.open) + " open" : ""}</div></div>
+        <div class="v"><div class="${r.pnl >= 0 ? "up" : "down"}">${signed(r.pnl)}</div></div></div>`).join("");
+    const tide = H.tide || {};
+    const paused = H.paused_until && H.paused_until * 1000 > Date.now() ? " · paused after 2 stops" : "";
+    return `<div class="section-h"><h2>Shorts (paper test) <span class="paper">PAPER</span></h2></div>
+      <div class="note">${H.active ? "Running" : "Finished"} · Tide ${tide.on ? "ON — shorts allowed" : "off — no new shorts"}${paused}<br>${esc(tide.why || "")}</div>
+      <div class="list">${open || '<div class="empty">No open shorts</div>'}</div>
+      <div class="list">${sum || ""}</div>
+      <div class="note">${esc(H.note || "")}</div>`;
+  }
   function est() {
     const E = S.est;
     const head = `<div class="title">Coins <span class="paper">PAPER</span></div>`;
@@ -383,7 +407,7 @@
       <div class="list">${closedRows || '<div class="empty">No closed trades yet</div>'}</div>
       <div class="section-h"><h2>Watchlist · ${watch.filter((w) => !w.watch_only).length}</h2></div>
       <div class="list">${watchRows || '<div class="empty">Watchlist empty</div>'}</div>
-      <div class="note">${esc(E.fill_note || "")}${E.last_refresh ? " Universe refreshed " + hhmm(E.last_refresh) + "." : ""}</div>`;
+      <div class="note">${esc(E.fill_note || "")}${E.last_refresh ? " Universe refreshed " + hhmm(E.last_refresh) + "." : ""}</div>${shortsSection()}`;
   }
   function render() {
     $("#demo-banner").hidden = !DEMO;
