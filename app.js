@@ -472,8 +472,8 @@
 
   // ---------- events ----------
   document.addEventListener("click", (e) => {
-    const go = e.target.closest("#desk-link-go");
-    if (go) {
+    const linkBtn = e.target.closest("#desk-link-go"); // NOT named `go`: that shadowed go() and broke every tap
+    if (linkBtn) {
       const raw = ($("#desk-link") && $("#desk-link").value) || "";
       const msg = $("#desk-link-msg");
       if (!saveDeskLink(parseDeskLink(raw))) {
